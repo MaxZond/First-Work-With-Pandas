@@ -590,3 +590,260 @@ X_test.to_csv('data/testing_features.csv', index = False)
 y.to_csv('data/training_labels.csv', index = False)
 y_test.to_csv('data/testing_labels.csv', index = False)
 ```
+
+
+# Код для БД:
+
+Это нормыльный код, правильный 
+```sql
+-- Создание базы данных BD
+CREATE DATABASE BD;
+GO
+
+-- Создание таблицы Users для хранения пользователей и паролей
+USE BD;
+CREATE TABLE Users (
+    UserID INT PRIMARY KEY IDENTITY(1,1),
+    UserName NVARCHAR(50),
+    PasswordHash VARBINARY(MAX)  -- Хранение зашифрованных паролей
+);
+GO
+
+-- Создание ключа и сертификата для шифрования
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'YourStrongPassword123';
+CREATE CERTIFICATE CertBD WITH SUBJECT = 'Certificate for BD encryption';
+CREATE SYMMETRIC KEY SymmetricKeyBD WITH ALGORITHM = AES_256 ENCRYPTION BY CERTIFICATE CertBD;
+GO
+
+DECLARE @counter INT = 1;
+DECLARE @username NVARCHAR(50);
+DECLARE @password NVARCHAR(50);
+DECLARE @i INT;
+DECLARE @index INT;
+DECLARE @chars NVARCHAR(200) = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+DECLARE @dbname NVARCHAR(50);
+DECLARE @cmd NVARCHAR(200);
+
+-- Цикл для создания 10 пользователей и баз данных
+USE master;
+WHILE @counter <= 10
+BEGIN
+    SET @username = 'user' + CAST(@counter AS NVARCHAR(10));
+    SET @password = '';
+    SET @i = 1;
+    WHILE @i <= 5
+    BEGIN
+        SET @index = ABS(CHECKSUM(NEWID())) % LEN(@chars) + 1;
+        SET @password = @password + SUBSTRING(@chars, @index, 1);
+        SET @i = @i + 1;
+    END
+    SET @dbname = 'BD' + CAST(@counter AS NVARCHAR(10));
+    SET @cmd = 'CREATE DATABASE ' + @dbname + ';';
+    EXEC sp_executesql @cmd;
+    SET @cmd = 'CREATE LOGIN ' + @username + ' WITH PASSWORD = ''' + @password + ''';';
+    EXEC sp_executesql @cmd;
+    SET @cmd = 'USE ' + @dbname + '; CREATE USER ' + @username + ' FOR LOGIN ' + @username + ';';
+    EXEC sp_executesql @cmd;
+    SET @cmd = 'USE ' + @dbname + '; ALTER ROLE db_owner ADD MEMBER ' + @username + ';';
+    EXEC sp_executesql @cmd;
+    USE BD;
+    OPEN SYMMETRIC KEY SymmetricKeyBD DECRYPTION BY CERTIFICATE CertBD;
+    INSERT INTO Users(UserName, PasswordHash)
+    VALUES (@username, ENCRYPTBYKEY(KEY_GUID('SymmetricKeyBD'), @password));
+    CLOSE SYMMETRIC KEY SymmetricKeyBD;
+    USE master;
+    SET @counter = @counter + 1;
+END
+
+-- Скрипт для расшифровки пароля
+USE BD;
+GO
+-- Открытие симметричного ключа для расшифровки
+OPEN SYMMETRIC KEY SymmetricKeyBD DECRYPTION BY CERTIFICATE CertBD;
+GO
+SELECT 
+    UserName, 
+    CAST(DECRYPTBYKEY(PasswordHash) AS NVARCHAR(50)) AS DecryptedPassword
+FROM Users;
+GO
+-- Закрытие симметричного ключа после расшифровки
+CLOSE SYMMETRIC KEY SymmetricKeyBD;
+GO
+```
+```sql
+--------------этот для меня на всякий случай
+DECLARE @username nVARCHAR(50)
+DECLARE @password nVARCHAR(50)
+DECLARE @counter INT = 1
+DECLARE @cmd NVARCHAR(200);
+DECLARE @i INT;
+DECLARE @index INT;
+DECLARE @dbname NVARCHAR(50);
+
+DECLARE @chars nVARCHAR(200) = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+WHILE @counter <= 10
+BEGIN
+    SET @username = 'user' + CAST(@counter AS nVARCHAR(10))
+    SET @password = '';
+	set @i = 1
+	WHILE @i <= 5
+	BEGIN
+		SET @index = ABS(CHECKSUM(NEWID())) % LEN(@chars) + 1;
+		SET @password = @password + SUBSTRING(@chars, @index, 1)
+		SET @i = @i + 1
+	ENd
+	SET @dbname = 'BD' + CAST(@counter AS NVARCHAR(10));
+	EXEC('create database ' + @dbname + ';');
+	EXEC('CREATE LOGIN ' + @username + ' with password = '''+ @password + ''';');
+	EXEC('USE ' + @dbName + '; CREATE USER ' + @userName + ' FOR LOGIN ' + @userName);
+    EXEC('USE ' + @dbName + '; ALTER ROLE db_owner ADD MEMBER ' + @userName);
+	use BD;
+	insert into Users(name,pass) values (@username,@password)
+	use master;
+	SET @counter = @counter + 1
+END
+```
+```sql
+-- Шифрование всех паролей в таблице Users
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = '$tr0nGPa$$w0rd'
+OPEN SYMMETRIC KEY MySymmetricKey
+DECRYPTION BY ASYMMETRIC KEY MyAsymmetricKey
+WITH PASSWORD = 'StrongPa$$w0rd!'
+--сертификат для ключа
+CREATE CERTIFICATE HumanResources037  
+   WITH SUBJECT = 'Employee Social Security Numbers';  
+GO  
+
+CREATE SYMMETRIC KEY MySymmetricKey  
+    WITH ALGORITHM = AES_256  
+    ENCRYPTION BY CERTIFICATE HumanResources037;  
+GO  
+OPEN SYMMETRIC KEY MySymmetricKey  
+   DECRYPTION BY CERTIFICATE HumanResources037;  
+
+UPDATE Users
+SET encrpass = EncryptByKey(Key_GUID('MySymmetricKey'), pass);  
+
+select * from Users
+--представления для проверки
+select * from sys.symmetric_keys;
+select * from sys.asymmetric_keys
+SELECT * FROM [sys].[openkeys]
+
+--дешифровка
+OPEN SYMMETRIC KEY SSN_Key_01  
+   DECRYPTION BY CERTIFICATE HumanResources037;  
+
+   SELECT name, pass,  
+    CONVERT(nvarchar, DecryptByKey(encrpass))   
+    AS 'Decrypted ID Number'  
+    FROM Users;  
+```
+```sql
+-- Резервное копирование базы данных BD
+BACKUP DATABASE BD TO DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\Backup\BD.bak';
+GO
+
+-- Процедура восстановления базы данных
+USE master;
+GO
+ALTER DATABASE BD SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+RESTORE DATABASE BD FROM DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\Backup\BD.bak' WITH REPLACE;
+GO
+ALTER DATABASE BD SET MULTI_USER; 
+
+
+---------процедура проверки почты
+CREATE PROCEDURE CheckEmailValidity
+AS
+BEGIN
+    SELECT 
+        email,
+        CASE 
+            WHEN Email LIKE '%[^A-Za-z0-9@.]%' OR Email LIKE '%[[]"<>'']%' THEN 0
+            WHEN Email LIKE '[A-Za-z0-9]%@[A-Za-z0-9]%.%' THEN 1
+            ELSE 0
+        END AS Validity
+    FROM Users;
+END
+
+EXEC CheckEmailValidity;
+
+-------таблица для хранения изменений тригера
+CREATE TABLE HistoryCost (
+    ChangeDate DATETIME,
+    ProductName NVARCHAR(100),
+    OldPrice DECIMAL(18, 2),
+    NewPrice DECIMAL(18, 2)
+);
+
+--------тригер
+alter TRIGGER trg_PriceChange
+ON Item
+AFTER UPDATE
+AS
+BEGIN
+    DECLARE @ProductName NVARCHAR(100);
+    DECLARE @OldPrice DECIMAL(18, 2);
+    DECLARE @NewPrice DECIMAL(18, 2);
+
+    SELECT @ProductName = ItemName, @OldPrice = Price FROM deleted;
+    SELECT @NewPrice = Price FROM inserted;
+
+    IF @OldPrice != @NewPrice
+    BEGIN
+        INSERT INTO HistoryCost (ChangeDate, ProductName, OldPrice, NewPrice)
+        VALUES (GETDATE(), @ProductName, @OldPrice, @NewPrice);
+    END
+END
+```
+```sql
+select * from HistoryCost
+
+
+
+select * from Преподаватель order by Фамилия 
+select * from Преподаватель order by Фамилия desc
+
+select * from Расписание order by Время_отправления
+select * from Расписание order by Время_отправления desc
+
+select * from Заказ order by Статус_заказа
+select * from Заказ order by Статус_заказа desc
+
+select * from Clients where name like '% %';
+```
+
+
+```C#
+static string connectionString = "Server=DESKTOP-2LGOQKK;initial catalog=Administr;integrated security=True;MultipleActiveResultSets=True;TrustServerCertificate=true";
+        SqlConnection connection = new SqlConnection(connectionString);
+
+		connection.Open();
+SqlCommand command = "Select ....";
+//command.ExecuteNonQuery();
+SqlDataReader r = cmd.ExecuteReader();
+var a = r.ToList();
+r.Close();
+ИЛИ
+DataTable dt_Offices = new DataTable();
+            List offices = new List() { FirstItem };
+
+            SqlCommand sqlCommand = sqlConnection.CreateCommand();
+            sqlCommand.CommandText = "select distinct User_Title from User_Info";
+
+            SqlDataAdapter dataAdapter = new SqlDataAdapter(sqlCommand);
+            dataAdapter.Fill(dt_Offices);
+
+/////для AppData
+public static class AppData
+    {
+        public static AdministrEntities db = new AdministrEntities();
+    }
+
+
+	/////DataGrid
+	DataGrid.ItemsSource = AppData.db.Sz.Where(x => x.Is_Complete == false).ToList();
+            connection.Close();
+
+```
